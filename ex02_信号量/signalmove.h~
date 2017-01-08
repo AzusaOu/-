@@ -1,0 +1,105 @@
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <semaphore.h>
+#include <signal.h>
+#include <fcntl.h>
+#include <string.h>
+#include <ctype.h>
+sem_t read_sem; // read
+sem_t write_sem; // write
+sem_t copy_sem; // copy
+
+pthread_mutex_t read_mutex; // pthread mutex for read
+pthread_mutex_t write_mutex; // pthread mutex for write
+
+char *data_s; //read buffer
+char *data_t; //write buffer
+int len; //buffer length
+
+char *filename_out; //name_out
+char *filename_in; //name_in
+
+int result;
+int result_copy;
+//file works
+void file_in(int fd, char *data, int len) {   
+    while (1) {   
+        sem_wait(&read_sem);   
+        pthread_mutex_lock(&read_mutex);   
+        printf("data_in..........\n");   
+        if (lseek(fd, 0, SEEK_CUR) == -1) {   
+            printf("lseek failed!\n");   
+        }   
+        if ((result = read(fd, data, len)) == -1) {   
+            printf("read error! \n");   
+        }   
+        int i=0,j=0;   
+        printf("data_in..........complete\n");   
+        pthread_mutex_unlock(&read_mutex);   
+        sem_post(&copy_sem);   
+        if(result<len){   
+            len=result;   
+            result=0;   
+            break;   
+        }   
+    }   
+}
+void file_out(int fd, char *data, int len) {   
+    while (1) {   
+        sem_wait(&write_sem);   
+        pthread_mutex_lock(&write_mutex);   
+        printf("data_out..........\n");   
+        if (write(fd, data, len) == -1) {   
+            printf("write error! \n");   
+        }   
+        printf("data_out..........complete\n");   
+        pthread_mutex_unlock(&write_mutex);   
+        if(result_copy==1){   
+            break;   
+        }   
+    }   
+}
+//copy from s to t
+void copy() {   
+    while (1) {   
+        sem_wait(&copy_sem);   
+        pthread_mutex_lock(&read_mutex);   
+        pthread_mutex_lock(&write_mutex);   
+        printf("copy..........\n");   
+        strcpy(data_t,data_s);   
+        int i=0;   
+        for(;i<len;i++){   
+            data_s[i]=' ';   
+        }   
+        printf("copy..........complete\n");   
+        pthread_mutex_unlock(&write_mutex);   
+        pthread_mutex_unlock(&read_mutex);   
+        sem_post(&write_sem);   
+        sem_post(&read_sem);   
+        if (result == 0) {   
+            result_copy = 1;   
+            break;   
+        }   
+    }   
+}
+void put() {   
+    int fd = open(filename_out, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);   
+    if (fd == -1) {   
+        printf("open file wrong!\n");   
+        exit(0);   
+    }   
+    file_out(fd, data_t, len);   
+}
+void get() {   
+    int fd = open(filename_in, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);   
+    if (fd == -1) {   
+        printf("open file wrong!\n");   
+        exit(0);   
+    }   
+    file_in(fd, data_s, len);   
+}
+
+
